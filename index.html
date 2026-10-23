@@ -226,7 +226,7 @@ button.chr canvas{width:30px;height:30px}
     <div class="ov ui" id="ovApp" hidden></div>
     <div class="ov clear" id="ovIntro" hidden></div>
     <div class="ov ui" id="ovScore" hidden></div>
-    <div class="ov" id="ovTitle"><img id="titleImg" alt="Atomic Bombers"><div class="press">press SPACE</div><div class="ver">version 76</div></div>
+    <div class="ov" id="ovTitle"><img id="titleImg" alt="Atomic Bombers"><div class="press">press SPACE</div><div class="ver">version 77</div></div>
     <div class="ov ui" id="ovPause" hidden><div class="card"><h2>PAUSED</h2><div class="row"><button id="btnResume" class="primary">Resume</button><button id="btnQuit">Quit to menu</button></div></div></div>
   </div>
 </div>
@@ -255,9 +255,10 @@ const DEFAULT_KEYS=[
 ];
 const ACTIONS=['up','down','left','right','fire'];
 const settings={keys:JSON.parse(JSON.stringify(DEFAULT_KEYS)),pads:[0,0,0,0],players:2,speed:5,music:true,sfx:true,flash:true,world:0,level:0,
-  slots:['human','human','human','human'],names:['Player 1','Player 2','Player 3','Player 4'],mode:'classic',target:0,hillSecs:15,smooth:true,onlineName:'',order:'ordered',vMusic:50,vSfx:55,hd:false,newItems:true,gfxMerged:false,teamColors:['blue','green'],teamSel:[0,0,1,1],chars:[0,1,2,3],onlineChar:0};
+  slots:['human','human','human','human'],names:['Player 1','Player 2','Player 3','Player 4'],mode:'classic',target:0,hillSecs:15,smooth:true,onlineName:'',order:'ordered',vMusic:50,vSfx:55,hd:false,newItems:true,gfxMerged:false,teamColors:['blue','green'],teamSel:[0,0,1,1],chars:[0,1,2,3],onlineChar:0,seenLv:[]};
 try{const s=JSON.parse(localStorage.getItem('atomicBombersRemake')||'null');if(s){for(const k of Object.keys(settings)) if(s[k]!==undefined) settings[k]=s[k]; if(s.vMusic===undefined&&s.music===false) settings.vMusic=0; if(s.vSfx===undefined&&s.sfx===false) settings.vSfx=0;}}catch(e){}
 if(!settings.gfxMerged){ if(settings.newItems!==false) settings.hd=true; settings.gfxMerged=true } settings.newItems=settings.hd;
+if(![0,10,25,50,100].includes(settings.target)) settings.target=settings.target>0?10:0; // first to 3 / 5 were removed; a target is now a score
 if(!Array.isArray(settings.slots)||settings.slots.length!==4) settings.slots=['human','human','human','human'];
 if(!Array.isArray(settings.names)||settings.names.length!==4) settings.names=['Player 1','Player 2','Player 3','Player 4'];
 settings.vMusic=Math.max(0,Math.min(100,+settings.vMusic||0)); settings.vSfx=Math.max(0,Math.min(100,+settings.vSfx||0)); settings.music=settings.vMusic>0; settings.sfx=settings.vSfx>0;
@@ -473,7 +474,7 @@ function newPlayers(){
   P=[0,1,2,3].map(i=>({idx:i,active:i<settings.players,alive:false,x:0,y:0,cx:0,cy:0,tx:0,ty:0,dir:0,speed:1,fuse:1500,
     maxBombs:settings.mode==='frenzy'?4:1,atomic:0,placed:0,powder:settings.mode==='frenzy'?5:2,keep:0,ill:0,illEnd:0,blink:0,
     defBombs:settings.mode==='frenzy'?4:1,defPowder:settings.mode==='frenzy'?5:2,score:0,wins:0,winsAtBonus:0,toggle:10,bonus:'',kills:0,
-    base:0,frame:0,lastAnim:0,lastBlink:0,lastUpd:0,input:0,prev:0,pref:0,prefT:-1e9,carry:0,px:0,py:0,hillMs:0,st:{bombs:0,items:{}},bot:null}));
+    base:0,frame:0,lastAnim:0,lastBlink:0,lastUpd:0,input:0,prev:0,pref:0,prefT:-1e9,carry:0,px:0,py:0,hillMs:0,st:{bombs:0,items:{}},mt:{rounds:0,kills:0,deaths:0,bombs:0,items:0},bot:null}));
 }
 newPlayers();
 
@@ -816,6 +817,7 @@ window.addEventListener('keydown',e=>{
     if(!$('ovMenu').hidden&&!fld&&tag!=='BUTTON'&&(e.code==='Space'||e.code==='Enter')){ e.preventDefault(); if(!e.repeat) continueGame(); return }
   }
   if(tag==='SELECT'||tag==='INPUT'||tag==='TEXTAREA') return;
+  if(state==='final'&&!net.client){ if(e.code==='Escape'||e.code==='Enter'||e.code==='Space'){ e.preventDefault(); if(!e.repeat) leaveFinal(); return } }
   if(window.__online&&window.__online.key&&window.__online.key(e)) return;
   if(state==='menu'&&!$('ovMenu').hidden&&(e.code==='Space'||e.code==='Enter')&&tag==='BUTTON'){ return }
   if(state==='menu'&&!$('ovMenu').hidden&&e.code==='Space'){ e.preventDefault(); if(!e.repeat){ if(resumeTo) continueGame(); else startGame() } return }
@@ -874,9 +876,10 @@ function endRound(){
     }
     msg=names.join(' + ')+(winners.length>1?' win':' wins')+(hillWin>=0?' the hill':(kills?' - '+kills+' kill'+(kills>1?'s':''):''));
   }
+  for(const p of act){ p.mt.rounds++; p.mt.kills+=killsBefore[p.idx]||0; if(!p.alive) p.mt.deaths++; p.mt.bombs+=p.st.bombs||0; p.mt.items+=Object.values(p.st.items||{}).reduce((a,b)=>a+b,0) }
   matchOver=false; roundMsg2='';
   if(settings.target>0){
-    const m=winners.find(p=>p.wins>=settings.target);
+    const m=winners.find(p=>p.score>=settings.target);
     if(m){ matchOver=true; roundMsg2=settings.mode==='teams'&&winners.length>1?'Team '+TEAM_NAME[settings.teamColors[teamAssign()[m.idx]]]+' wins the match!':'P'+(m.idx+1)+' wins the match!' }
   }
   lastResult=P.map((p,i)=>({active:p.active,won:winners.includes(p),died:p.active&&!p.alive,kills:killsBefore[i],bombs:p.st.bombs}));
@@ -886,13 +889,15 @@ function endRound(){
 }
 function showScore(){ scoreEnd=gt+(matchOver?12000:8000); $('ovScore').hidden=true }
 let bag=[], forceFirst=false;
+/* random levels: every level is played once before any repeats; the list of levels already played is kept between matches */
 function randomLevel(){
-  if(!bag.length){
-    bag=[]; WORLDS.forEach((w,wi)=>w.levels.forEach((l,li)=>bag.push([wi,li])));
-    for(let i=bag.length-1;i>0;i--){const j=(Math.random()*(i+1))|0;[bag[i],bag[j]]=[bag[j],bag[i]]}
-    if(bag.length>1&&bag[bag.length-1][0]===worldIdx&&bag[bag.length-1][1]===levelIdx) bag.unshift(bag.pop());
-  }
-  return bag.pop();
+  const all=[]; WORLDS.forEach((w,wi)=>w.levels.forEach((l,li)=>all.push(wi+','+li)));
+  let seen=(settings.seenLv||[]).filter(k=>all.includes(k)), left=all.filter(k=>!seen.includes(k));
+  if(!left.length){ seen=[]; left=all.slice() }
+  const cur=worldIdx+','+levelIdx;
+  if(left.length>1&&seen.length===0&&left.includes(cur)) left=left.filter(k=>k!==cur); // a new cycle does not open with the level just played
+  const pick=left[(Math.random()*left.length)|0]; seen.push(pick); settings.seenLv=seen; save();
+  return pick.split(',').map(Number);
 }
 function exitTest(){
   editorTest=false; inGameMenu=false; pauseSimple=false; paused=false; resumeTo=null; lastMenuId=null; state='menu'; musicOff();
@@ -901,10 +906,48 @@ function exitTest(){
 }
 function nextRound(){
   if(editorTest){ exitTest(); return }
-  if(matchOver){ matchOver=false; resumeTo=null; state='menu'; musicOff(); if(net.host&&net.onMatchEnd) net.onMatchEnd(); else showMenu(); return }
+  if(matchOver){ startFinal(); return }
   if(settings.order==='random'){ [worldIdx,levelIdx]=randomLevel() }
   else if(levelIdx+1>=10){levelIdx=0;worldIdx=(worldIdx+1)%WORLDS.length} else levelIdx++;
   $('ovScore').hidden=true; startLevel();
+}
+/* ---------- end of a match: winner and stats ---------- */
+let FIN=null;
+function matchStandings(){
+  const act=P.filter(p=>p.active), teams=settings.mode==='teams'&&settings.players>2;
+  const rows=act.map(p=>({idx:p.idx,score:p.score,wins:p.wins,kills:p.mt.kills,deaths:p.mt.deaths,bombs:p.mt.bombs,items:p.mt.items,team:teamOf(p.idx)}));
+  rows.sort((a,b)=>b.score-a.score||b.wins-a.wins||b.kills-a.kills||a.idx-b.idx);
+  let head='No winner', win=[];
+  if(roundsPlayed>0&&rows.some(r=>r.score>0||r.wins>0)){
+    if(teams){
+      const t=[0,0], w=[0,0]; for(const r of rows){ t[r.team]+=r.score; w[r.team]+=r.wins }
+      const k=t[0]!==t[1]?(t[0]>t[1]?0:1):(w[0]!==w[1]?(w[0]>w[1]?0:1):-1);
+      if(k>=0){ head='Team '+TEAM_NAME[settings.teamColors[k]]+' wins the match!'; win=rows.filter(r=>r.team===k).map(r=>r.idx) } else head='It is a tie'
+    } else {
+      const a=rows[0], b=rows[1];
+      if(b&&b.score===a.score&&b.wins===a.wins&&b.kills===a.kills) head='It is a tie'; else { head='P'+(a.idx+1)+' wins the match!'; win=[a.idx] }
+    }
+  }
+  return {head,win,rows,rounds:roundsPlayed};
+}
+function startFinal(){
+  if(editorTest){ exitTest(); return }
+  FIN=matchStandings();
+  inGameMenu=false; pauseSimple=false; paused=false; resumeTo=null; lastMenuId=null; matchOver=false;
+  for(const id of ['ovPause','ovScore','ovIntro','ovMenu','ovSettings']) $(id).hidden=true;
+  state='final'; musicOff(); down.clear();
+  if(net.host&&net.onPhase) net.onPhase('f');
+  cv.focus({preventScroll:true});
+}
+function leaveFinal(){
+  FIN=null; matchOver=false; resumeTo=null; state='menu'; musicOff();
+  if(net.host&&net.onMatchEnd) net.onMatchEnd(); else showMenu();
+}
+function endGameNow(){ if(editorTest){ exitTest(); return } startFinal() }
+function bindEnd(){
+  const e=$('btnEnd'); if(!e) return; let armed=false;
+  e.onclick=()=>{ if(!armed){ armed=true; e.firstChild.nodeValue='Press again to end the game'; return } endGameNow() };
+  e.onblur=()=>{ armed=false; e.firstChild.nodeValue='End game' };
 }
 function togglePause(){
   paused=!paused; $('ovPause').hidden=!paused;
@@ -1050,6 +1093,28 @@ function drawScore(){
     y+=gap;
   }
 }
+function drawFinal(){
+  frameBorder();
+  if(!FIN) return;
+  const Z=22, pad=(n,w)=>String(Math.min(n,Math.pow(10,w)-1)).padStart(w,'0');
+  drawText('MATCH OVER',102,44,16);
+  drawText('FINAL SCORES',102,64,26);
+  const wrap=(t,n)=>{ const out=[]; let cur=''; for(const w of t.toUpperCase().split(/\s+/)){ if(cur&&(cur+' '+w).length>n){ out.push(cur); cur=w } else cur=cur?cur+' '+w:w } if(cur) out.push(cur); return out };
+  let y=108; for(const ln of wrap(FIN.head,34)){ drawText(ln,102,y,14); y+=20 }
+  const cols=[['SCORE',214,3],['WINS',276,3],['KILLS',334,3],['DEATHS',394,3],['BOMBS',466,3],['ITEMS',530,3]];
+  y+=14; for(const [h,x] of cols) drawText(h,x,y,9);
+  y+=22; const step=Math.min(54,Math.floor((410-y)/Math.max(1,FIN.rows.length)));
+  FIN.rows.forEach((r,i)=>{
+    if(FIN.win.includes(r.idx)){ ctx.fillStyle='rgba(255,210,31,.2)'; ctx.fillRect(104,y-8,486,Z+16) }
+    drawText(String(i+1),112,y+4,14);
+    sdraw(7*CS,56*r.idx,CS,CS,134,y-3,Z+3,Z+3);
+    drawText('P'+(r.idx+1),164,y+4,14);
+    const v=[r.score,r.wins,r.kills,r.deaths,r.bombs,r.items];
+    cols.forEach(([h,x,w],k)=>drawText(pad(v[k],w),x,y+4,14));
+    y+=step;
+  });
+  drawText('PRESS SPACE',228,432,12);
+}
 /* static layer (walls, items) is painted once and reused until a cell, the theme or the scale changes */
 const SL={cv:document.createElement('canvas'),key:'',cells:new Int16Array(W*H).fill(-1)};
 function drawStatic(wl,it){
@@ -1074,9 +1139,10 @@ function draw(){
   const anyPac=settings.flash&&state==='play'&&!paused&&P.some(p=>p.active&&p.alive&&p.ill===8)&&Math.floor(gt/400)%2===1;
   ctx.setTransform(SC,0,0,SC,0,0); ctx.fillStyle=anyPac?'#ce6342':'#000'; ctx.fillRect(0,0,640,480);
   if(!sheetReady||state==='menu') return;
-  HDON=hdEnsure(state==='intro'||state==='score'); ctx.imageSmoothingEnabled=HDON; if(HDON) ctx.imageSmoothingQuality='low';
+  HDON=hdEnsure(state==='intro'||state==='score'||state==='final'); ctx.imageSmoothingEnabled=HDON; if(HDON) ctx.imageSmoothingQuality='low';
   if(state==='intro'){ drawIntro(); return }
   if(state==='score'){ drawScore(); return }
+  if(state==='final'){ drawFinal(); return }
   for(const p of P) if(p.active&&p.alive) drawPlayer(p);
   const wl=WALLS[tod], it=ITEMS[tod], sp=STRIP[tod];
   drawStatic(wl,it);
@@ -1126,7 +1192,7 @@ function tick(){
   }
   if(state==='play'&&!paused){
     for(const p of P){p.px=p.x;p.py=p.y}
-    pollInputs();
+    pollInputs(); pacPairStep();
     const a=aliveCount();
     if(a>=2) lastMulti=gt;
     if(hillWin<0&&settings.mode==='hill'&&hill){
@@ -1184,15 +1250,15 @@ function showMenu(){
   if(inGameMenu&&pauseSimple){
     const b=(id,t,sub,cls)=>'<button class="mi '+cls+'" role="menuitem" id="'+id+'">'+t+(sub?'<small>'+esc(sub)+'</small>':'')+'</button>';
     o.innerHTML='<div class="card menu"><div class="mcols"><div class="mlist" role="menu"><h2 style="margin:0 0 10px 4px">PAUSED</h2>'
-      +b('btnCont','Continue game','World '+(worldIdx+1)+', level '+(levelIdx+1),'pri')+'<div class="mmid">'+b('btnSetup','Game setup'+sumHtml(true),null,'mid')+b('btnCtl','Controls',null,'mid')+b('btnOpt','Options',null,'mid')+'</div>'
+      +b('btnCont','Continue game','World '+(worldIdx+1)+', level '+(levelIdx+1),'pri')+'<div class="mmid">'+b('btnSetup','Game setup'+sumHtml(true),null,'mid')+b('btnCtl','Controls',null,'mid')+b('btnOpt','Options',null,'mid')+b('btnEnd','End game',null,'mid')+'</div>'
       +'</div></div></div>';
-    $('btnCont').onclick=continueGame; $('btnSetup').onclick=showSetup; $('btnCtl').onclick=showSettings; $('btnOpt').onclick=showOptions;
+    $('btnCont').onclick=continueGame; $('btnSetup').onclick=showSetup; $('btnCtl').onclick=showSettings; $('btnOpt').onclick=showOptions; bindEnd();
     paintSum(); $('btnCont').focus({preventScroll:true}); return;
   }
   if(settings.world>=WORLDS.length) settings.world=0;
   const btn=(id,t,sub,cls)=>'<button class="mi '+cls+'" role="menuitem" id="'+id+'">'+t+(sub?'<small>'+esc(sub)+'</small>':'')+'</button>';
   const lead=resumeTo?btn('btnCont','Continue game','World '+(worldIdx+1)+', level '+(levelIdx+1),'pri'):btn('btnStart','Start game',null,'pri');
-  const mid=(resumeTo?btn('btnStart','New game',null,'mid'):'')+btn('btnSetup','Game setup'+sumHtml(true),null,'mid')+btn('btnOnline','Play online',null,'mid');
+  const mid=(resumeTo?btn('btnStart','New game',null,'mid')+btn('btnEnd','End game',null,'mid'):'')+btn('btnSetup','Game setup'+sumHtml(true),null,'mid')+btn('btnOnline','Play online',null,'mid');
   const low=[['btnEdit','Level editor'],['btnStats','Stats'],['btnCtl','Controls'],['btnOpt','Options'],['btnApp','Install / offline']].map(([id,t])=>btn(id,t,null,'sm')).join('');
   o.innerHTML='<div class="card menu"><div class="mcols"><div class="mlist" role="menu">'
     +'<h2 style="margin:0 0 10px 4px">ATOMIC BOMBERS</h2>'+lead+'<div class="mmid">'+mid+'</div><div class="msm">'+low+'</div>'
@@ -1205,7 +1271,7 @@ function showMenu(){
   $('btnEdit').onclick=()=>window.__editor&&window.__editor.open();
   $('btnStats').onclick=()=>window.__stats&&window.__stats.open();
   $('btnApp').onclick=()=>window.__app&&window.__app.open();
-  $('btnCtl').onclick=showSettings;
+  $('btnCtl').onclick=showSettings; bindEnd();
   (resumeTo?$('btnCont'):$('btnStart')).focus({preventScroll:true});
 }
 function showOptions(){
@@ -1250,7 +1316,7 @@ function showSetup(){
    +'<div class="grow" style="display:flex;flex-direction:column;gap:14px">'
    +'<div class="field"><b>Mode</b>'+segHTML('sgMode',Object.keys(MODES).map(k=>[k,MODES[k][0]]),settings.mode)+'</div>'
    +'<div class="xslot">'+(teams?'<div class="field"><b>Team colours</b><div class="row" style="gap:10px"><span class="hint" style="width:70px;white-space:nowrap">Team 1</span>'+segHTML('sgTc0',TEAM_COLORS.map(c=>[c,'<i class="dot" style="background:'+TEAM_HEX[c]+'"></i>'+TEAM_NAME[c]]),settings.teamColors[0])+'</div><div class="row" style="gap:10px"><span class="hint" style="width:70px;white-space:nowrap">Team 2</span>'+segHTML('sgTc1',TEAM_COLORS.map(c=>[c,'<i class="dot" style="background:'+TEAM_HEX[c]+'"></i>'+TEAM_NAME[c]]),settings.teamColors[1])+'</div></div>':'')+(settings.mode==='hill'?'<div class="field"><b>Hill time</b>'+segHTML('sgHill',[[10,'10 s'],[15,'15 s'],[25,'25 s'],[40,'40 s']],settings.hillSecs)+'</div>':'')+'</div>'
-   +'<div class="field"><b>Match</b>'+segHTML('sgTarget',[[0,'Endless'],[3,'First to 3'],[5,'First to 5'],[10,'First to 10']],settings.target)+'</div>'
+   +'<div class="field"><b>Match</b>'+segHTML('sgTarget',[[0,'Endless'],[10,'First to 10'],[25,'First to 25'],[50,'First to 50'],[100,'First to 100']],settings.target)+'</div>'
    +'<div class="field"><b>Levels</b>'+segHTML('sgOrder',[['ordered','In order'],['random','Random']],settings.order)
    +'<div class="row"'+(rnd?' style="visibility:hidden" aria-hidden="true"':'')+'><select id="selWorld" aria-label="World"'+(rnd?' disabled tabindex="-1"':'')+'>'+wopts+'</select><select id="selLevel" aria-label="Level"'+(rnd?' disabled tabindex="-1"':'')+'>'+lopts+'</select></div></div>'
    +'</div></div><div class="row"><button class="primary" id="setStart">Start game</button><button id="setBack" data-back>Back</button></div></div>';
@@ -1281,7 +1347,7 @@ function beginMatch(){
   resumeTo=null; inGameMenu=false; pauseSimple=false; editorTest=false;
   initAudio(); if(actx&&actx.state==='suspended') actx.resume();
   setTeamSkin(settings.mode==='teams'&&settings.players>2); hdEnsure(true);
-  newPlayers(); roundsPlayed=0; matchOver=false; worldIdx=settings.world; levelIdx=settings.level; bag=[];
+  newPlayers(); roundsPlayed=0; matchOver=false; worldIdx=settings.world; levelIdx=settings.level;
   if(settings.order==='random'&&!forceFirst){ [worldIdx,levelIdx]=randomLevel() }
   forceFirst=false; gt=0; paused=false;
   down.clear(); startLevel(); cv.focus({preventScroll:true});
@@ -1465,9 +1531,12 @@ function botBits(p){
   if(p.ill!==6&&p.ill!==7){ B.ill67=0; B.fuseKnown=true } else if(B.ill67!==p.ill){ B.ill67=p.ill; B.fuseKnown=false }
   const fuseBelieved=B.fuseKnown?p.fuse:1500;
   // pac-man hunts for a while; if nobody can be caught it lays a bomb to get rid of the curse
-  if(p.ill!==8) B.pacT=0; else if(!B.pacT) B.pacT=gt;
+  // a pac-man bot keeps hunting and only lays a bomb when that clearly beats eating someone (see tryBomb); it never gives up on a timer
+  if(p.ill!==8){ B.pacT=0; B.stuckT=0 } else if(!B.pacT) B.pacT=gt;
   const catchable=P.some(q=>q.active&&q.alive&&q!==p&&teamOf(q.idx)!==teamOf(p.idx)&&q.ill!==8);
-  const giveUp=p.ill===8&&(!catchable||gt-B.pacT>9000), pac=p.ill===8&&!giveUp;
+  // the last two players are both pac-men: nobody can eat the other, so nobody drops a bomb alone (pacPairStep lays them together)
+  const alivePl=P.filter(q=>q.active&&q.alive), pacDuel=p.ill===8&&alivePl.length===2&&alivePl.every(q=>q.ill===8);
+  let giveUp=p.ill===8&&!pacDuel&&!catchable, pac=p.ill===8&&!giveUp;
   // what this bot believes about other people's bombs: remembered per bomb, so it is wrong in a consistent way
   const prev=B.kn||new Map(), seen=new Map();
   // other people's bombs: the bot cannot read their reach, so it assumes its own, and cannot tell a fast or slow fuse
@@ -1515,6 +1584,12 @@ function botBits(p){
   // a slow player rarely allows for being slow when working out how far it can get
   const cmB=B.fl&&B.fmis&&p.ill===4?cm*.6:cm;
   const R=botBfs(p,ox0,oy0,D,cmB,PT);
+  // nobody left to eat can be reached (walled in): after a while a bomb is the only way to make progress
+  if(pac&&!pacDuel){
+    const reach=enemies.some(q=>q.ill!==8&&!q.mem&&(R.dist[q.cx*H+q.cy]>=0||R.dist[q.tx*H+q.ty]>=0));
+    if(reach) B.stuckT=0; else if(!B.stuckT) B.stuckT=gt;
+    if(B.stuckT&&gt-B.stuckT>5000){ giveUp=true; pac=false }
+  }
   const dangerHere=(D[here]&&!cellRefuge(D,here,0,cm))||!!(D.pot&&D.pot[here]); // a ticking bomb's whole reach counts, not just the last moment
   if(!B.act) B.act=gt;
   const set=bits=>{if(bits&15){ B.lastMove=bits&15; B.act=gt } else if(B.fire) B.act=gt; B.bits=bits;if(window.__botdbg&&p.idx===(window.__botIdx||0))window.__botdbg.push({ill:p.ill,pl:p.placed,why:B.why,t:Math.round(gt),c:[p.cx,p.cy],o:[ox0,oy0],dir:p.dir,bits,fire:B.fire,dh:!!dangerHere,goal:B.goal});return bits|(B.fire?0x10:0)};
@@ -1522,7 +1597,7 @@ function botBits(p){
   const tryBomb=(noGate,force,plan)=>{
     if(B.rashCell!==here){ B.rashCell=here; B.rash=Math.random()<L.rash } // now and then a bot lays a bomb without thinking it through
     const rash=B.rash&&!imm;
-    if(pac||(immRaw&&!imm)||(p.dir!==0&&!plan)||p.placed>=p.maxBombs||bm[here].a||isHard(top[here])||isDestr(top[here])||top[here]===1||(!noGate&&!imm&&Math.random()>=L.bombP)){B.why='pre';return null}
+    if((immRaw&&!imm)||(p.dir!==0&&!plan)||p.placed>=p.maxBombs||bm[here].a||isHard(top[here])||isDestr(top[here])||top[here]===1||(!noGate&&!imm&&Math.random()>=L.bombP)){B.why='pre';return null}
     const bl=blastCells(ox0,oy0,p.powder,p.atomic>0);
     let value=0, kill=false;
     for(const [ci] of bl){
@@ -1531,14 +1606,26 @@ function botBits(p){
       for(const q of enemies) if((q.cx*H+q.cy===ci)||(q.tx*H+q.ty===ci)){ value+=10; kill=true }
       for(const q of friends) if((q.cx*H+q.cy===ci)||(q.tx*H+q.ty===ci)) value-=12;
     }
+    if(pac&&!kill){B.why='pac';return null}
     if(value<=0&&!giveUp&&!force&&!imm&&!rash){B.why='value'+value;return null}
-    let best=-1,bd=1e9,R2=null;
+    let best=-1,bd=1e9,R2=null,D2=null;
     if(imm){ R2=R; best=here; bd=0 }
     else {
-      const D2=dangerMap({i:here,x:ox0,y:oy0,r:rash?Math.max(1,p.powder-1):p.powder,at:p.atomic>0?1:0,t:fuseBelieved,cells:null},Math.max(L.look,p.fuse+800),kn);
+      D2=dangerMap({i:here,x:ox0,y:oy0,r:rash?Math.max(1,p.powder-1):p.powder,at:p.atomic>0?1:0,t:fuseBelieved,cells:null},Math.max(L.look,p.fuse+800),kn);
       R2=botBfs(p,ox0,oy0,D2,cmB,PT);
       for(const i of R2.q) if(R2.dist[i]>0&&R2.dist[i]<bd&&cellRefuge(D2,i,R2.dist[i]*cmB,cm)){bd=R2.dist[i];best=i}
       if(!(best>=0&&bd<=8)){ if(rash&&Math.random()<.6) return {bits:0,kill:false}; B.why='noescape';return null }
+    }
+    if(pac){ // pac-man: only worth it if somebody in the blast is trapped for sure and cannot simply be eaten right now
+      const hit=enemies.filter(q=>q.ill!==8&&!q.mem&&bl.some(([ci])=>q.cx*H+q.cy===ci||q.tx*H+q.ty===ci));
+      const sure=hit.some(q=>{
+        let dx=Math.abs(q.cx-p.cx); dx=Math.min(dx,W-dx); let dy=Math.abs(q.cy-p.cy); dy=Math.min(dy,H-dy);
+        if(dx+dy<=1) return false;
+        const Rq=botBfs(q,q.cx,q.cy,D2,cm,null);
+        for(const i of Rq.q) if(cellRefuge(D2,i,Rq.dist[i]*cm,cm)) return false;
+        return true;
+      });
+      if(!sure){ B.why='pacnotrap'; return null }
     }
     return {bits:best===here?0:firstBit(R2,here,best),kill};
   };
@@ -1699,6 +1786,24 @@ function botBits(p){
   // each time a new way has to be chosen, a person stops for a moment
   if(B.pdone===here){ B.pdone=-1 } else if(mv!==B.lastMove&&gt>=(B.turnNext||0)){ B.turnNext=gt+300; return pauseFor(rnd2(L.pause[0],L.pause[1])*(chaser?.5:1)) }
   return set(mv);
+}
+
+/* the last two players are both pac-men (nobody can eat the other): a human's bomb is mirrored by the bot at the same moment,
+   and two bots lay their bombs together and carry on */
+let pairT=0;
+function pacPairStep(){
+  const al=P.filter(p=>p.active&&p.alive);
+  if(al.length!==2||!al.every(p=>p.ill===8)){ pairT=0; return }
+  const isBot=p=>{ const k=settings.slots[p.idx]; return k==='easy'||k==='normal'||k==='hard' };
+  const can=p=>{ const i=p.cx*H+p.cy; return p.placed<p.maxBombs&&!bm[i].a&&!isHard(top[i])&&!isDestr(top[i])&&top[i]!==1 };
+  const [a,b]=al;
+  if(isBot(a)&&isBot(b)){
+    if(!pairT) pairT=gt;
+    if(gt-pairT>1200&&can(a)&&can(b)){ a.input|=0x10; b.input|=0x10; pairT=0 }
+  } else if(isBot(a)!==isBot(b)){
+    pairT=0; const h=isBot(a)?b:a, bt=isBot(a)?a:b;
+    if((h.input&0x10)&&can(h)&&can(bt)) bt.input|=0x10;
+  } else pairT=0;
 }
 
 /* ---------- stats, profiles and hall of fame ---------- */
@@ -2217,7 +2322,7 @@ function renderLobby(){
    +'<h3>Players</h3><div class="list">'+rows.join('')+'</div>';
   if(isHost){
     html+='<div class="row"><label>Bots <select id="onBots">'+[0,1,2,3].map(n=>'<option'+(cfg.b===n?' selected':'')+'>'+n+'</option>').join('')+'</select></label><label>Bot level <select id="onBl">'+['easy','normal','hard'].map(k=>'<option'+(cfg.bl===k?' selected':'')+'>'+k+'</option>').join('')+'</select></label></div>'
-     +'<div class="row"><label>Mode <select id="onMode">'+Object.keys(MODES).map(k=>'<option value="'+k+'"'+(cfg.m===k?' selected':'')+'>'+MODES[k][0]+'</option>').join('')+'</select></label><label>Match <select id="onTarget">'+[[0,'Endless'],[3,'First to 3'],[5,'First to 5'],[10,'First to 10']].map(([v,t])=>'<option value="'+v+'"'+(cfg.t===v?' selected':'')+'>'+t+'</option>').join('')+'</select></label></div>'
+     +'<div class="row"><label>Mode <select id="onMode">'+Object.keys(MODES).map(k=>'<option value="'+k+'"'+(cfg.m===k?' selected':'')+'>'+MODES[k][0]+'</option>').join('')+'</select></label><label>Match <select id="onTarget">'+[[0,'Endless'],[10,'First to 10'],[25,'First to 25'],[50,'First to 50'],[100,'First to 100']].map(([v,t])=>'<option value="'+v+'"'+(cfg.t===v?' selected':'')+'>'+t+'</option>').join('')+'</select></label></div>'
      +(cfg.m==='teams'?'<div class="row"><label>Team 1 <select id="onTc0">'+TEAM_COLORS.map(c=>'<option value="'+c+'"'+((cfg.tc||settings.teamColors)[0]===c?' selected':'')+'>'+TEAM_NAME[c]+'</option>').join('')+'</select></label><label>Team 2 <select id="onTc1">'+TEAM_COLORS.map(c=>'<option value="'+c+'"'+((cfg.tc||settings.teamColors)[1]===c?' selected':'')+'>'+TEAM_NAME[c]+'</option>').join('')+'</select></label></div>':'')
      +(cfg.m==='teams'&&nSeats>2?'<div class="row">'+Array.from({length:nSeats},(_,i)=>'<label>Player '+(i+1)+' <select id="onTs'+i+'"><option value="0"'+(tsel[i]?'':' selected')+'>Team 1</option><option value="1"'+(tsel[i]?' selected':'')+'>Team 2</option></select></label>').join('')+'</div>':'')
      +'<div class="row"><label>Levels <select id="onOrder"><option value="ordered"'+(cfg.o!=='random'?' selected':'')+'>In order</option><option value="random"'+(cfg.o==='random'?' selected':'')+'>Random</option></select></label><label>Speed <input id="onSpeed" type="range" min="1" max="10" value="'+cfg.s+'" style="width:150px;--p:'+((cfg.s-1)/9*100)+'%"></label></div>'
@@ -2278,8 +2383,10 @@ net.remoteBits=idx=>{
 net.onPhase=ph=>{
   if(!ON.r||!net.host) return; ON.phase=ph;
   if(ph==='i') ON.r.presence({lv:{th:theme,nm:curLevelName,w:worldIdx,l:levelIdx,td:curTod,od:curOd,il:curIll,r:roundsPlayed,sc:P.map(p=>p.score)}}).catch(()=>{});
+  if(ph==='f') ON.r.presence({scr:{fin:finPack(),k:roundsPlayed,mo:1,msg:'',m2:'',rows:[]}}).catch(()=>{});
   if(ph==='s') ON.r.presence({scr:{msg:roundMsg,m2:roundMsg2,mo:matchOver?1:0,k:roundsPlayed,rows:P.slice(0,settings.players).map((p,i)=>{const r=lastResult[i]||{};return [p.score,p.wins,p.defBombs,p.defPowder,p.keep?1:0,p.bonus||'',r.kills|0,r.won?1:0,r.died?1:0,r.bombs|0]})}}).catch(()=>{});
 };
+const finPack=()=>FIN?{h:FIN.head,w:FIN.win,r:FIN.rounds,rows:FIN.rows.map(r=>[r.idx,r.score,r.wins,r.kills,r.deaths,r.bombs,r.items,r.team])}:null;
 net.onMatchEnd=()=>{
   restoreSettings(); net.on=false;net.host=false; ON.inGame=false; ON.leaveOpen=false; state='menu'; paused=false;
   if(ON.r) ON.r.presence({ph:'lobby',lv:null,scr:null,mid:null,g:null}).catch(()=>{});
@@ -2294,7 +2401,7 @@ function encBombs(){
 }
 function pump(){
   if(!ON.r) return;
-  if(net.host&&ON.inGame&&(state==='intro'||state==='play'||state==='score')){
+  if(net.host&&ON.inGame&&(state==='intro'||state==='play'||state==='score'||state==='final')){
     let g=''; for(let i=0;i<N;i++) g+=String.fromCharCode(40+Math.min(86,Math.max(0,top[i])));
     const s={n:++ON.snapN,ph:ON.phase,td:tod,bt:baseTod,ox,oy,bn:boomN};
     if(g!==ON.lastTop||++ON.topCnt>=16){ s.g=g; ON.lastTop=g; ON.topCnt=0 }
@@ -2335,6 +2442,7 @@ function applyLv(lv){
   curLevelName=String(lv.nm||'').slice(0,20); 
 }
 function applyScr(sc){
+  if(sc&&sc.fin&&Array.isArray(sc.fin.rows)){ const f=sc.fin; FIN={head:String(f.h||'').slice(0,60),win:Array.isArray(f.w)?f.w:[],rounds:f.r|0,rows:f.rows.map(a=>({idx:a[0]|0,score:a[1]|0,wins:a[2]|0,kills:a[3]|0,deaths:a[4]|0,bombs:a[5]|0,items:a[6]|0,team:a[7]|0}))}; return }
   if(!sc||!Array.isArray(sc.rows)) return;
   roundMsg=String(sc.msg||'').slice(0,60); roundMsg2=String(sc.m2||'').slice(0,60); matchOver=!!sc.mo;
   sc.rows.forEach((r,i)=>{ const p=P[i]; if(!p) return; p.score=r[0]|0;p.wins=r[1]|0;p.defBombs=r[2]|0;p.defPowder=r[3]|0;p.keep=r[4]|0;p.bonus=String(r[5]||'') });
@@ -2361,11 +2469,11 @@ function onSnap(msg){
   tod=s.td|0; baseTod=s.bt|0; ox=+s.ox||CS; oy=+s.oy||0;
   if((s.bn|0)>ON.lastBn){ if(ON.lastBn>0||(s.bn|0)===1) boom(); ON.lastBn=s.bn|0 }
   if(Array.isArray(s.hl)){ hill={x:s.hl[0],y:s.hl[1]}; P.forEach((p,i)=>{ p.hillMs=(s.hl[2+i]|0)*100 }) } else hill=null;
-  const nph=s.ph==='p'?'play':s.ph==='s'?'score':'intro';
+  const nph=s.ph==='p'?'play':s.ph==='s'?'score':s.ph==='f'?'final':'intro';
   if(nph!==state){
     state=nph;
     if(nph==='play') musicOn(); else musicOff();
-    const h2=hostPeer(); if(h2&&h2.presence){ if(h2.presence.lv) applyLv(h2.presence.lv); if(nph==='score'&&h2.presence.scr) applyScr(h2.presence.scr) }
+    const h2=hostPeer(); if(h2&&h2.presence){ if(h2.presence.lv) applyLv(h2.presence.lv); if((nph==='score'||nph==='final')&&h2.presence.scr) applyScr(h2.presence.scr) }
   }
 }
 net.render=dt=>{
@@ -2699,7 +2807,7 @@ window.__editor.open=openEditor;
 
 
 /* test hooks (read-only helpers for automated checks) */
-window.__ab={draw:()=>draw(),info:()=>({sheet:[sheet0.naturalWidth,sheet0.naturalHeight],hd:HD.canvas&&[HD.canvas.width,HD.canvas.height],cv:[cv.width,cv.height],ms:HD.ms}),prof:()=>{const c=document.createElement("canvas");c.width=sheet0.naturalWidth;c.height=sheet0.naturalHeight;const g=c.getContext("2d",{willReadFrequently:true});g.drawImage(sheet0,0,0);const w=c.width,h=c.height;let t=performance.now();const id=g.getImageData(0,0,w,h);const s=new Uint32Array(id.data.buffer);const t1=performance.now();const a=hdEpx(s,w,h,34);const t2=performance.now();const bg=hdEpx(a,w*2,h*2,34);const t3=performance.now();const E=document.createElement("canvas");E.width=w*4;E.height=h*4;E.getContext("2d").putImageData(new ImageData(new Uint8ClampedArray(bg.buffer),w*4,h*4),0,0);const t4=performance.now();const o=document.createElement("canvas");o.width=w*4;o.height=h*4;const og=o.getContext("2d");og.filter="blur(1.15px)";og.drawImage(E,0,0);og.filter="none";og.globalAlpha=.38;og.drawImage(E,0,0);og.getImageData(0,0,1,1);const t5=performance.now();return {get:t1-t,epx1:t2-t1,epx2:t3-t2,put:t4-t3,blur:t5-t4}},hdms:()=>HD.ms,skin:tc=>{settings.teamColors=tc;teamSheet=null;setTeamSkin(true);return teamSheet.toDataURL()},tick:()=>tick(),lv:()=>[worldIdx,levelIdx],dangerMap,blastCells,get roundMsg(){return roundMsg},get roundMsg2(){return roundMsg2},get matchOver(){return matchOver},get state(){return state},P:()=>P,top:()=>top,under:()=>under,bm:()=>bm,WORLDS,buildLevel,startGame,get gt(){return gt},set gt(v){gt=v},settings,updateBombs:()=>updateBombs(),step:()=>{pollInputs();for(const p of P)updatePlayer(p);for(const p of P)handleInput(p);updateBombs()},resetPlayers,setLevel:(w,l)=>{worldIdx=w;levelIdx=l}};
+window.__ab={randomLevel:()=>randomLevel(),startFinal:()=>startFinal(),endGameNow:()=>endGameNow(),get FIN(){return FIN},draw:()=>draw(),info:()=>({sheet:[sheet0.naturalWidth,sheet0.naturalHeight],hd:HD.canvas&&[HD.canvas.width,HD.canvas.height],cv:[cv.width,cv.height],ms:HD.ms}),prof:()=>{const c=document.createElement("canvas");c.width=sheet0.naturalWidth;c.height=sheet0.naturalHeight;const g=c.getContext("2d",{willReadFrequently:true});g.drawImage(sheet0,0,0);const w=c.width,h=c.height;let t=performance.now();const id=g.getImageData(0,0,w,h);const s=new Uint32Array(id.data.buffer);const t1=performance.now();const a=hdEpx(s,w,h,34);const t2=performance.now();const bg=hdEpx(a,w*2,h*2,34);const t3=performance.now();const E=document.createElement("canvas");E.width=w*4;E.height=h*4;E.getContext("2d").putImageData(new ImageData(new Uint8ClampedArray(bg.buffer),w*4,h*4),0,0);const t4=performance.now();const o=document.createElement("canvas");o.width=w*4;o.height=h*4;const og=o.getContext("2d");og.filter="blur(1.15px)";og.drawImage(E,0,0);og.filter="none";og.globalAlpha=.38;og.drawImage(E,0,0);og.getImageData(0,0,1,1);const t5=performance.now();return {get:t1-t,epx1:t2-t1,epx2:t3-t2,put:t4-t3,blur:t5-t4}},hdms:()=>HD.ms,skin:tc=>{settings.teamColors=tc;teamSheet=null;setTeamSkin(true);return teamSheet.toDataURL()},tick:()=>tick(),lv:()=>[worldIdx,levelIdx],dangerMap,blastCells,get roundMsg(){return roundMsg},get roundMsg2(){return roundMsg2},get matchOver(){return matchOver},get state(){return state},P:()=>P,top:()=>top,under:()=>under,bm:()=>bm,WORLDS,buildLevel,startGame,get gt(){return gt},set gt(v){gt=v},settings,updateBombs:()=>updateBombs(),step:()=>{pollInputs();for(const p of P)updatePlayer(p);for(const p of P)handleInput(p);updateBombs()},resetPlayers,setLevel:(w,l)=>{worldIdx=w;levelIdx=l}};
 window.__ab.int={down,teamOf,flameKiller,P:()=>P,HD:()=>HD,sh0:()=>sheet0,hdBase:()=>hdBase(),setTod:v=>{tod=baseTod=v},bm:()=>bm,top:()=>top,under:()=>under,W:()=>W,H:()=>H,CS:()=>CS};
 
 showMenu();
